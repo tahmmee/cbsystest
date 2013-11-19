@@ -36,14 +36,13 @@ parser = argparse.ArgumentParser(description='CB System Test KV Consumer')
 parser.add_argument("--cluster", default = cfg.CB_CLUSTER_TAG, help="the CB_CLUSTER_TAG from testcfg will be used by default <default>")
 
 # some global state
-CB_CLUSTER_TAG = ""
+CB_CLUSTER_TAG = cfg.CB_CLUSTER_TAG
 CLIENTSPERPROCESS = 4
 NUMPROCESSES = 5
 PROCSSES = []
 
 # broker handle
-conn = Connection(host="localhost", userid="guest",
-                  password="guest", virtual_host="default")
+conn = Connection(host= cfg.RABBITMQ_IP, userid="guest", password="guest", virtual_host = cfg.CB_CLUSTER_TAG)
 channel = conn.channel()
 
 
@@ -68,12 +67,12 @@ class SDKClient(threading.Thread):
         self.ttl = task['ttl']
         self.miss_perc = task['miss_perc']
         self.active_hosts = task['active_hosts']
-        self.batch_size = 1000
+        self.batch_size = 5000
         self.memq = queue.Queue()
         self.hotset = []
         self.ccq = None
         self.hotkeys = []
-        if 'cc_queues' in task['template']:
+        if task['template']['cc_queues']:
             self.ccq = str(task['template']['cc_queues'][0])  #only supporting 1 now
             RabbitHelper().declare(self.ccq)
 
@@ -82,6 +81,9 @@ class SDKClient(threading.Thread):
             self.batch_size = self.create_count
 
         self.active_hosts = task['active_hosts']
+        if not self.active_hosts:
+            self.active_hosts = [cfg.COUCHBASE_IP]
+
         addr = task['active_hosts'][random.randint(0,len(self.active_hosts) - 1)].split(':')
         host = addr[0]
         port = 8091
@@ -112,7 +114,7 @@ class SDKClient(threading.Thread):
             else:
                 pass #probably  we are overcomitted, but it's ok
 
-            if self.memq.qsize() > 20:
+            if self.memq.qsize() > 100:
                 self.flushq()
 
         # push everything to rabbitmq
@@ -376,7 +378,8 @@ class SDKClient(threading.Thread):
 
         try:
             key_map = self.memq.get_nowait()
-
+            if requeue:
+                self.memq.put_nowait(key_map)
         except queue.Empty:
             #no more items
             if self.ccq is not None:
@@ -406,7 +409,6 @@ class SDKProcess(Process):
         self.clients = []
         p_id = self.id
         self.client_events = [Event() for e in xrange(CLIENTSPERPROCESS)]
-
         for i in xrange(CLIENTSPERPROCESS):
             name = _random_string(4)+"-"+str(p_id)+str(i)+"_"
 
