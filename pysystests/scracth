@@ -1,0 +1,32 @@
+    def getKeys(self, count):
+        keys = None
+        keys_retrieved = 0
+
+        while keys_retrieved < count:
+            try:
+                keys = self.ccq.get_nowait()
+                keys_retrieved = keys_retrieved + len(keys)
+            except queue.Empty:
+                # no more keys to get, if we have some - reuse
+                if keys:
+                    _keys = []
+                    while len(_keys) < count:
+                        _keys = _keys + keys
+                    keys = keys[0:count]
+        return keys
+
+    def mget(self, count):
+        keys = self.getKeys(count)
+        if keys:
+            try:
+                for key_idx in keys[::self.batch_size]:
+                    batch = keys[key_idx:self.batch_size]
+                    self.cb.get_multi(batch)
+                    self.ccq.put_nowait(batch)
+
+            except NotFoundError as nf:
+                # key not found!  nf.key
+                self.ccq.put_nowait(batch)
+                pass
+
+
