@@ -41,9 +41,9 @@ CLIENTSPERPROCESS = 4
 NUMPROCESSES = 5
 PROCSSES = []
 
-# broker handle
-conn = Connection(host= cfg.RABBITMQ_IP, userid="guest", password="guest", virtual_host = cfg.CB_CLUSTER_TAG)
-channel = conn.channel()
+# broker init
+#conn = Connection(host= cfg.RABBITMQ_IP, userid="guest", password="guest", virtual_host = cfg.CB_CLUSTER_TAG)
+#channel = conn.channel()
 
 
 
@@ -458,6 +458,10 @@ def start_client_processes(task):
 
 def init(message):
     body = message.body
+
+    if str(body) == 'init':
+        return
+
     try:
         task = json.loads(str(body))
         kill_procs()
@@ -467,18 +471,27 @@ def init(message):
         print "Unable to start workload processes"
         print ex
 
-    message.ack()
 
 
 
 def main():
     args = parser.parse_args()
     CB_CLUSTER_TAG = args.cluster
+    exchange = CB_CLUSTER_TAG+"consumers"
 
-    # listen for task from workers
-    consumer_queue = "sdk_consumers_"+CB_CLUSTER_TAG
-    channel.queue_declare(queue = consumer_queue, durable = True, auto_delete = True)
-    channel.basic_consume(consumer_queue, callback=init)
+    # setup to consume messages from worker
+    mq = RabbitHelper()
+    mq.exchange_declare(exchange, "fanout")
+    queue = mq.declare()
+    queue_name = queue[0]
+
+    # bind to exchange
+    mq.bind(exchange, queue_name)
+    mq.putMsg('', 'init', exchange)
+
+    # consume messages
+    channel, conn = mq.channel()
+    channel.basic_consume(callback = init, queue = queue_name, no_ack = True)
 
     while True:
         conn.drain_events()

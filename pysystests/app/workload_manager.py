@@ -133,7 +133,7 @@ def run(workload):
 
     workload.active = True
     rabbitHelper = RabbitHelper()
-    sdk_queue = 'sdk_consumers_'+cfg.CB_CLUSTER_TAG
+    sdk_queue_key = "sdk_consumer.*"
 
     # read doc template
     template = Template.from_cache(str(workload.template))
@@ -162,7 +162,9 @@ def run(workload):
     ops_sec = workload.ops_per_sec
 
     # modify ops by number of consumers
-    num_consumers = rabbitHelper.declare(sdk_queue)[2]
+    exchange = cfg.CB_CLUSTER_TAG+"consumers"
+    num_consumers = rabbitHelper.numExchangeQueues(cfg.CB_CLUSTER_TAG, exchange)
+
     if num_consumers == 0:
         logger.error("No sdkclients running")
         return
@@ -194,8 +196,8 @@ def run(workload):
            'miss_perc' : miss_perc,
            'active_hosts' : active_hosts}
 
-    logger.error(num_consumers)
-    rabbitHelper.putMsg(sdk_queue, json.dumps(msg))
+    rabbitHelper.putMsg('', json.dumps(msg), exchange)
+    logger.error("task sent to %s consumers" % num_consumers)
 
 
 
