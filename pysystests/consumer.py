@@ -40,7 +40,7 @@ CB_CLUSTER_TAG = cfg.CB_CLUSTER_TAG
 CLIENTSPERPROCESS = 2
 PROCSPERTASK = 4
 MAXPROCESSES = 16
-PROCSSES = {} 
+PROCSSES = {}
 
 # broker init
 #conn = Connection(host= cfg.RABBITMQ_IP, userid="guest", password="guest", virtual_host = cfg.CB_CLUSTER_TAG)
@@ -92,10 +92,11 @@ class SDKClient(threading.Thread):
             port = addr[1]
         self.cb = GConnection(bucket=self.bucket, password = self.password, host = host, port = port)
 
-
         self.e = e
 
     def run(self):
+
+        cycle = ops_total = 0
 
         while self.e.is_set() == False:
 
@@ -114,6 +115,12 @@ class SDKClient(threading.Thread):
                 time.sleep(wait)
             else:
                 pass #probably  we are overcomitted, but it's ok
+
+            ops_total = ops_total + self.ops_sec
+            cycle = cycle + 1
+
+            if (cycle % 100) == 0:
+                logging.info("[Thread %s] total ops: %s" % (self.name, ops_total))
 
             if self.memq.qsize() > 100:
                 self.flushq()
@@ -151,7 +158,18 @@ class SDKClient(threading.Thread):
         threads = []
 
         if self.create_count > 0:
-            t = gevent.spawn(self.mset, self.template['kv'], self.create_count)
+
+            count = self.create_count
+            docs_to_expire = self.exp_count
+
+            # check if we need to expire some docs
+            if docs_to_expire > 0:
+
+                # create an expire batch
+                self.mset(self.template['kv'], docs_to_expire, ttl = self.ttl)
+                count = count - docs_to_expire
+
+            t = gevent.spawn(self.mset, self.template['kv'], count)
             threads.append(t)
 
         if self.update_count > 0:
@@ -169,7 +187,7 @@ class SDKClient(threading.Thread):
 
         return threads
 
-    def mset(self, template, count):
+    def mset(self, template, count, ttl = 0):
         msg = {}
         keys = []
         cursor = 0
@@ -179,22 +197,25 @@ class SDKClient(threading.Thread):
             self.i = self.i+1
             msg[self.name+str(self.i)] = template
             keys.append(self.name+str(self.i))
+
             if ((j+1) % self.batch_size) == 0:
                 batch = keys[cursor:j+1]
                 self.memq.put_nowait({'start' : batch[0],
                                       'end'  : batch[-1]})
-                self._mset(msg)
+                self._mset(msg, ttl)
                 cursor = j + 1
                 msg = {}
 
         if (cursor < j) and (len(msg) > 0):
-            self._mset(msg)
+            self._mset(msg, ttl)
             self.memq.put_nowait({'start' : keys[cursor],
                                   'end'  : keys[-1]})
 
-    def _mset(self, msg):
+
+    def _mset(self, msg, ttl = 0):
+
         try:
-            self.cb.set_multi(msg)
+            self.cb.set_multi(msg, ttl=ttl)
         except TemporaryFailError:
             logging.warn("temp failure during mset - cluster may be unstable")
         except TimeoutError:
@@ -451,7 +472,7 @@ def start_client_processes(task):
     workload_id = task['id']
     PROCSSES[workload_id] = []
 
-   
+
     for i in range(PROCSPERTASK):
 
         # set process id and provide queue
