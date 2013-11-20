@@ -1,4 +1,4 @@
-development branch of the systemtest framework for couchbase
+development branch of the fabulous systemtest framework for couchbase
 
 Requires:
 ----
@@ -6,6 +6,11 @@ Requires:
     pip install argparse
     pip install librabbitmq
     pip install pyrabbit
+    
+    # systest users can install latest python sdk using the update script
+    cd pysystests
+    ./updateworker.sh
+
 
 for running as standalone:
 ----
