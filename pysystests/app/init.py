@@ -52,5 +52,6 @@ CacheHelper.cacheClean()
 exchange = cfg.CB_CLUSTER_TAG+"consumers"
 RabbitHelper().exchange_declare(exchange, "fanout")
 os.system("python consumer.py  &")
+os.system("ulimit -n 10240")
 
 

@@ -46,7 +46,6 @@ from couchbase import Couchbase
 from couchbase.experimental import enable as enable_experimental
 enable_experimental()
 from gcouchbase.connection import GConnection
-conn = GConnection(bucket='default')
 
 class PersistedCB(Task):
     clientMap = {}

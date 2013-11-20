@@ -37,9 +37,10 @@ parser.add_argument("--cluster", default = cfg.CB_CLUSTER_TAG, help="the CB_CLUS
 
 # some global state
 CB_CLUSTER_TAG = cfg.CB_CLUSTER_TAG
-CLIENTSPERPROCESS = 4
-NUMPROCESSES = 5
-PROCSSES = []
+CLIENTSPERPROCESS = 2
+PROCSPERTASK = 4
+MAXPROCESSES = 16
+PROCSSES = {} 
 
 # broker init
 #conn = Connection(host= cfg.RABBITMQ_IP, userid="guest", password="guest", virtual_host = cfg.CB_CLUSTER_TAG)
@@ -53,7 +54,7 @@ class SDKClient(threading.Thread):
         threading.Thread.__init__(self)
         self.name = name
         self.i = 0
-        self.op_factor = CLIENTSPERPROCESS * NUMPROCESSES
+        self.op_factor = CLIENTSPERPROCESS * PROCSPERTASK
         self.ops_sec = task['ops_sec']
         self.bucket = task['bucket']
         self.password  = task['password']
@@ -436,15 +437,22 @@ class SDKProcess(Process):
 def _random_string(length):
     return (("%%0%dX" % (length * 2)) % random.getrandbits(length * 8)).encode("ascii")
 
-def kill_procs():
+def kill_nprocs(id_, kill_num = None):
 
-    for p in PROCSSES:
+    procs = PROCSSES[id_]
+    if kill_num == None:
+        kill_num = len(procs)
+
+    for i in range(kill_num):
         p.terminate()
-
 
 def start_client_processes(task):
 
-    for i in range(NUMPROCESSES):
+    workload_id = task['id']
+    PROCSSES[workload_id] = []
+
+   
+    for i in range(PROCSPERTASK):
 
         # set process id and provide queue
         p_id = (i)*CLIENTSPERPROCESS
@@ -454,22 +462,38 @@ def start_client_processes(task):
         p.start()
 
         # archive
-        PROCSSES.append(p)
+        PROCSSES[workload_id].append(p)
+
 
 def init(message):
     body = message.body
+    task = None
 
     if str(body) == 'init':
         return
 
     try:
         task = json.loads(str(body))
-        kill_procs()
-        start_client_processes(task)
 
-    except Exception as ex:
-        print "Unable to start workload processes"
-        print ex
+    except Exception:
+        print "Unable to parse workload task"
+        print body
+        return
+
+    if  task['active'] == False:
+
+        # stop processes running a workload
+        workload_id = task['id']
+        kill_nprocs(workload_id)
+
+
+    else:
+        try:
+            start_client_processes(task)
+
+        except Exception as ex:
+            print "Unable to start workload processes"
+            print ex
 
 
 

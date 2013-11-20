@@ -23,6 +23,7 @@ from celery.utils.log import get_task_logger
 logger = get_task_logger(__name__)
 
 
+EXCHANGE = cfg.CB_CLUSTER_TAG+"consumers"
 if cfg.SERIESLY_IP != '':
     from seriesly import Seriesly
 
@@ -162,8 +163,7 @@ def run(workload):
     ops_sec = workload.ops_per_sec
 
     # modify ops by number of consumers
-    exchange = cfg.CB_CLUSTER_TAG+"consumers"
-    num_consumers = rabbitHelper.numExchangeQueues(cfg.CB_CLUSTER_TAG, exchange)
+    num_consumers = rabbitHelper.numExchangeQueues(cfg.CB_CLUSTER_TAG, EXCHANGE)
 
     if num_consumers == 0:
         logger.error("No sdkclients running")
@@ -183,6 +183,7 @@ def run(workload):
 
     # broadcast to sdk_consumers
     msg = {'bucket' : bucket,
+           'id' : workload.id,
            'password' : password,
            'template' : consumer_template.__dict__,
            'ops_sec' : ops_sec,
@@ -194,10 +195,11 @@ def run(workload):
            'consume_queue' : consume_queue,
            'ttl' : ttl,
            'miss_perc' : miss_perc,
+           'active' : True,
            'active_hosts' : active_hosts}
 
-    rabbitHelper.putMsg('', json.dumps(msg), exchange)
-    logger.error("task sent to %s consumers" % num_consumers)
+    rabbitHelper.putMsg('', json.dumps(msg), EXCHANGE)
+    logger.error("start task sent to %s consumers" % num_consumers)
 
 
 
@@ -983,7 +985,12 @@ class Workload(object):
 
         # check if workload is being deactivated
         if name == "active" and self.active == False and self.initialized:
-            self.requeueNonDeletedKeys()
+            msg = {'active' : False,
+                   'id' : self.id}
+            RabbitHelper().putMsg('', json.dumps(msg), EXCHANGE)
+            logger.error("kill task %s" % self.id)
+
+            #self.requeueNonDeletedKeys()
 
     def requeueNonDeletedKeys(self):
         rabbitHelper = RabbitHelper()
