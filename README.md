@@ -14,7 +14,7 @@ Requires:
 
 for running as standalone:
 ----
-    python cbsystest.py run workload --create 100 --ops 80000  --standalone 
+    python cbsystest.py run workload --create 100 --ops 80000  --standalone --hosts  10.20.331.21 
 
 saslbucket:
 ----
