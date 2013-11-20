@@ -1,3 +1,7 @@
+Requires:
+---
+pip install  gevent
+pip install argparse
 
 for running as standalone:
 ----
