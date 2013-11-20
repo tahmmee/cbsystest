@@ -91,8 +91,13 @@ class RabbitHelper(object):
         return self.manager.get_exchange(vhost, exchange)
 
     def numExchangeQueues(self, vhost, exchange):
-        ex = self.getExchange(vhost, exchange)
-        return len(ex['outgoing'])
+
+        try:
+          ex = self.getExchange(vhost, exchange)
+          return len(ex['outgoing'])
+        except Exception:
+          return 1 # todo: sometimes the broker doesn't return expected response
+
 
     def putMsg(self, routing_key, body, exchange = ''):
 
