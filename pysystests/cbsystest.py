@@ -4,7 +4,6 @@ from rabbit_helper import RabbitHelper
 import uuid
 import time
 import copy
-from consumer import start_client_processes
 
 parser = argparse.ArgumentParser(description='CB System Test Tool')
 subparser = parser.add_subparsers(dest="subparsers")
@@ -190,6 +189,7 @@ def run_workload(args):
     cluster = args.cluster
 
     if args.standalone:
+        from consumer import start_client_processes
         task = argsToTask(args)
         start_client_processes(task)
     else:
